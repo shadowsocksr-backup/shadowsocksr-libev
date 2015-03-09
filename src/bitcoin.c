@@ -28,7 +28,19 @@
 #include <openssl/bn.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
+#include <openssl/ripemd.h>
 #include <openssl/sha.h>
+
+//
+// address prefix
+// @see https://en.bitcoin.it/wiki/List_of_address_prefixes
+//
+#define BITCOIN_ADDRESS_PREFIX_PUBKEY         0x00
+#define BITCOIN_ADDRESS_PREFIX_PUBKEY_TESTNET 0x6F
+
+#define BITCOIN_PUBKEY_UNCOMPRESSED 0x00
+#define BITCOIN_PUBKEY_COMPRESSED   0x01
+
 
 #define skip_char(c) \
 (((c) == '\r') || ((c) == '\n') || ((c) == ' ') || ((c) == '\t'))
@@ -124,6 +136,83 @@ out:
     BN_clear_free(&bnbase);
     BN_CTX_free(bnctx);
     return res;
+}
+
+static void vg_b58_encode_check(void *buf, size_t len, char *result)
+{
+    unsigned char hash1[32];
+    unsigned char hash2[32];
+
+    int d, p;
+
+    BN_CTX *bnctx;
+    BIGNUM *bn, *bndiv, *bntmp;
+    BIGNUM bna, bnb, bnbase, bnrem;
+    unsigned char *binres;
+    int brlen, zpfx;
+
+    bnctx = BN_CTX_new();
+    BN_init(&bna);
+    BN_init(&bnb);
+    BN_init(&bnbase);
+    BN_init(&bnrem);
+    BN_set_word(&bnbase, 58);
+
+    bn = &bna;
+    bndiv = &bnb;
+
+    brlen = (2 * len) + 4;
+    binres = (unsigned char*) malloc(brlen);
+    memcpy(binres, buf, len);
+
+    SHA256(binres, len, hash1);
+    SHA256(hash1, sizeof(hash1), hash2);
+    memcpy(&binres[len], hash2, 4);
+
+    BN_bin2bn(binres, len + 4, bn);
+
+    for (zpfx = 0; zpfx < (len + 4) && binres[zpfx] == 0; zpfx++);
+
+    p = (int)brlen;
+    while (!BN_is_zero(bn)) {
+        BN_div(bndiv, &bnrem, bn, &bnbase, bnctx);
+        bntmp = bn;
+        bn = bndiv;
+        bndiv = bntmp;
+        d = BN_get_word(&bnrem);
+        binres[--p] = vg_b58_alphabet[d];
+    }
+
+    while (zpfx--) {
+        binres[--p] = vg_b58_alphabet[0];
+    }
+
+    memcpy(result, &binres[p], brlen - p);
+    result[brlen - p] = '\0';
+    
+    free(binres);
+    BN_clear_free(&bna);
+    BN_clear_free(&bnb);
+    BN_clear_free(&bnbase);
+    BN_clear_free(&bnrem);
+    BN_CTX_free(bnctx);
+}
+
+static void vg_encode_address(const EC_POINT *ppoint, const EC_GROUP *pgroup,
+                              point_conversion_form_t form, int addr_type, char *result)
+{
+    unsigned char eckey_buf[128] = {0};
+    unsigned char binres[21] = {0,};
+    unsigned char hash1[32];
+    size_t len = 0;
+
+    len = EC_POINT_point2oct(pgroup, ppoint, form,
+                             eckey_buf, sizeof(eckey_buf), NULL);
+    binres[0] = addr_type;
+    SHA256(eckey_buf, len, hash1);
+    RIPEMD160(hash1, sizeof(hash1), &binres[1]);
+
+    vg_b58_encode_check(binres, sizeof(binres), result);
 }
 
 
@@ -407,25 +496,17 @@ err:
     return ret;
 }
 
-int sign_message(char *signature, size_t signature_size,
-                 const char *msg, const size_t msg_len,
-                 const char *priv_key_b58, int is_compressed_pubkey) {
+static int priv_key_b58_to_address(const char *priv_key_b58,
+                                   const int is_compressed_pubkey,
+                                   const int addr_type,
+                                   char *address) {
     EC_KEY *pkey   = NULL;
-    ECDSA_SIG *sig = NULL;
-    EC_KEY *eckey  = NULL;  // recover key
-
-    uint8_t pubKey[65];  // public key max size is 65 bytes
-    uint8_t pubKey_rc[65];
-    int pubkey_size, pubkey_rc_size;
-    uint8_t sigbuf[65];
-
-    unsigned char *pbegin = NULL;
     unsigned char buf[128] = {0};
-    int res, fOK = -1;
-    int nBitsR, nBitsS;
-    unsigned char hash[32];
-
-    dsha265_message(hash, (uint8_t *)msg, msg_len);  // message double sha256
+    uint8_t pubKey[65];  // public key max size is 65 bytes
+    char ecprot[128];
+    unsigned char *pbegin  = NULL;
+    int res, pubkey_size = 0;
+    int fOk = 0;
 
     pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
     EC_KEY_set_conv_form(pkey, is_compressed_pubkey ?
@@ -441,6 +522,91 @@ int sign_message(char *signature, size_t signature_size,
     // get pubkey
     pubkey_size = i2o_ECPublicKey(pkey, NULL);
     if (!pubkey_size) { goto error; }
+    pbegin = pubKey;
+    if (i2o_ECPublicKey(pkey, &pbegin) != pubkey_size) { goto error; }
+
+    // encode address
+    vg_encode_address(EC_KEY_get0_public_key(pkey),
+                      EC_KEY_get0_group(pkey),
+                      is_compressed_pubkey ?
+                      POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED,
+                      addr_type, ecprot);
+    strcpy(address, ecprot);
+    fOk = 1;
+
+error:
+    if (pkey) { EC_KEY_free(pkey); }
+    return fOk;
+}
+
+//
+// return:
+//   -1 : invalid private key
+//    1 : compressed
+//    0 : uncompressed
+static int isCompressedAddress(const char *priv_key_b58, const char *address) {
+    int is_compressed_pubkey;
+    char buf[64];
+    int res;
+
+    // try compressed
+    is_compressed_pubkey = 1;
+    memset(buf, 0, sizeof(buf));
+    res = priv_key_b58_to_address(priv_key_b58, is_compressed_pubkey,
+                                  BITCOIN_ADDRESS_PREFIX_PUBKEY, buf);
+    if (res != 1) { return -1; }
+    if (memcmp(buf, address, strlen(address)) == 0) {
+        return 1;  // compressed
+    }
+
+    // try uncompressed
+    is_compressed_pubkey = 0;
+    memset(buf, 0, sizeof(buf));
+    res = priv_key_b58_to_address(priv_key_b58, is_compressed_pubkey,
+                                  BITCOIN_ADDRESS_PREFIX_PUBKEY, buf);
+    if (res != 1) { return -1; }
+    if (memcmp(buf, address, strlen(address)) == 0) {
+        return 0;  // uncompressed
+    }
+
+    return -1;
+}
+
+static int sign_message(char *signature, size_t signature_size,
+                        const uint8_t *msg, const size_t msg_len,
+                        const char *priv_key_b58, int is_compressed_pubkey) {
+    EC_KEY *pkey   = NULL;
+    ECDSA_SIG *sig = NULL;
+    EC_KEY *eckey  = NULL;  // recover key
+
+    uint8_t pubKey[65];  // public key max size is 65 bytes
+    uint8_t pubKey_rc[65];
+    int pubkey_size, pubkey_rc_size;
+    uint8_t sigbuf[65];
+
+    unsigned char *pbegin = NULL;
+    unsigned char buf[128] = {0};
+    int res, fOK = 0;
+    int nBitsR, nBitsS;
+    unsigned char hash[32];
+
+    dsha265_message(hash, msg, msg_len);  // message double sha256
+
+    pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    EC_KEY_set_conv_form(pkey, is_compressed_pubkey ?
+                         POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED);
+
+    // import secret
+    vg_b58_decode_check(priv_key_b58, buf, 33);
+    BIGNUM *bn = BN_bin2bn(buf + 1, 32, BN_new());
+    res = EC_KEY_regenerate_key(pkey, bn);
+    BN_clear_free(bn);
+    memset(buf, 0, sizeof(buf));
+    if (!res){ goto error; }
+
+    // get pubkey
+    pubkey_size = i2o_ECPublicKey(pkey, NULL);
+    if (!pubkey_size) { goto error; }
 
     pbegin = pubKey;
     if (i2o_ECPublicKey(pkey, &pbegin) != pubkey_size) { goto error; }
@@ -451,13 +617,15 @@ int sign_message(char *signature, size_t signature_size,
 
     nBitsR = BN_num_bits(sig->r);
     nBitsS = BN_num_bits(sig->s);
+
     if (nBitsR <= 256 && nBitsS <= 256) {
         int nRecId = -1;
+        int i;
         eckey = EC_KEY_new_by_curve_name(NID_secp256k1);
         EC_KEY_set_conv_form(eckey, is_compressed_pubkey ?
                              POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED);
 
-        for (int i = 0; i < 4; i++) {
+        for (i = 0; i < 4; i++) {
             if (ECDSA_SIG_recover_key_GFp(eckey, sig, (unsigned char*)hash,
                                           sizeof(hash), i, 1) == 1) {
                 // get recover pubkey
@@ -481,11 +649,13 @@ int sign_message(char *signature, size_t signature_size,
         sigbuf[0] = nRecId + 27 + (is_compressed_pubkey ? 4 : 0);
         BN_bn2bin(sig->r, sigbuf + 33 - (nBitsR+7)/8);
         BN_bn2bin(sig->s, sigbuf + 65 - (nBitsS+7)/8);
-        fOK = 0;
-    }
 
-    // convent to base64
-    base64_encode((char *)sigbuf, sizeof(sigbuf), signature, (int)signature_size);
+        // convent to base64
+        if (base64_encode((char *)sigbuf, sizeof(sigbuf),
+                          signature, (int)signature_size) != -1) {
+            fOK = 1;
+        }
+    }
     
 error:
     if (pkey)  { EC_KEY_free(pkey); }
@@ -495,12 +665,50 @@ error:
     return fOK;
 }
 
-int verify_message(const char *address,
-                   const uint8_t *hash, const int hashlen,
-                   const uint8_t *sigbuf, const int siglen) {
-    EC_KEY *pkey = NULL;
-    // -1 = error, 0 = bad sig, 1 = good
-    if (ECDSA_verify(0, hash, hashlen, sigbuf, siglen, pkey) == 1)
-        return 1;
-    return 0;
+
+int bitcoin_sign_message(char *signature, size_t signature_size,
+                         const void *msg, const size_t msg_len,
+                         const char *priv_key_b58, const char *address) {
+    int is_compressed = isCompressedAddress(priv_key_b58, address);
+    return sign_message(signature, signature_size, (uint8_t *)msg, msg_len,
+                        priv_key_b58, is_compressed);
+}
+
+int bitcoin_verify_message(const char *address, const char *sig_b64,
+                           const void *msg, const size_t msglen) {
+    EC_KEY *pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    uint8_t hash[32] = {0};
+    char ecprot[128] = {0};
+    uint8_t sig[128] = {0};  // sig is 65 bytes, but base64 decode need more
+    int fOK = 0;
+
+    // decode base64
+    base64_decode(sig_b64, strlen(sig_b64), (char *)sig, sizeof(sig));
+
+    // message double sha256
+    dsha265_message(hash, msg, msglen);
+
+    // recover
+    ECDSA_SIG *esig = ECDSA_SIG_new();
+    BN_bin2bn(&sig[1],  32, esig->r);
+    BN_bin2bn(&sig[33], 32, esig->s);
+    int ret = ECDSA_SIG_recover_key_GFp(pkey, esig, hash, sizeof(hash),
+                                        ((sig[0] - 27) & ~4), 0) == 1;
+    ECDSA_SIG_free(esig);
+    if (!ret) { goto error; }
+
+    int is_compressed_pubkey = (sig[0] - 27) & 4;
+    // encode address
+    vg_encode_address(EC_KEY_get0_public_key(pkey),
+                      EC_KEY_get0_group(pkey),
+                      is_compressed_pubkey ?
+                      POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED,
+                      BITCOIN_ADDRESS_PREFIX_PUBKEY, ecprot);
+    if (memcmp(address, ecprot, strlen(address)) == 0) {
+        fOK = 1;
+    }
+
+error:
+    if (pkey) { EC_KEY_free(pkey); }
+    return fOK;
 }

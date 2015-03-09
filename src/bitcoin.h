@@ -23,19 +23,13 @@
 #define _BITCOIN_H
 
 #include <stddef.h>
-
-//
-// address prefix
-// @see https://en.bitcoin.it/wiki/List_of_address_prefixes
-//
-#define BITCOIN_ADDRESS_PREFIX_PUBKEY         0x00
-#define BITCOIN_ADDRESS_PREFIX_PUBKEY_TESTNET 0x6F
-
-#define BITCOIN_PUBKEY_UNCOMPRESSED 0x00
-#define BITCOIN_PUBKEY_COMPRESSED   0x01
+#include <inttypes.h>
 
 extern int bitcoin_sign_message(char *signature, size_t signature_size,
-                                const char *msg, const size_t msg_len,
-                                const char *priv_key_b58, int is_compressed_pubkey);
+                                const void *msg, const size_t msg_len,
+                                const char *priv_key_b58, const char *address);
+
+extern int bitcoin_verify_message(const char *address, const char *sig_b64,
+                                  const void *msg, const size_t msglen);
 
 #endif

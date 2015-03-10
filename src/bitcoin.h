@@ -31,4 +31,10 @@ extern int bitcoin_sign_message(unsigned char *buf_65,
 extern int bitcoin_verify_message(const char *address, const unsigned char *sig_65,
                                   const void *msg, const size_t msglen);
 
+struct btc_client;
+struct btc_list;
+extern struct btc_list *bitcoin_init_list();
+extern size_t bitcoin_tryload_list(struct btc_list *list);
+extern int bitcoin_check_address(struct btc_list *list, const char *address);
+
 #endif

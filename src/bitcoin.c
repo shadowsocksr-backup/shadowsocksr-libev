@@ -22,9 +22,13 @@
 #include "bitcoin.h"
 
 #include <assert.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
-#include <inttypes.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include <openssl/bn.h>
 #include <openssl/ecdsa.h>
@@ -573,4 +577,126 @@ int bitcoin_verify_message(const char *address, const unsigned char *sig,
 error:
     if (pkey) { EC_KEY_free(pkey); }
     return fOK;
+}
+
+
+
+struct btc_client {
+    char address[36];
+};
+struct btc_list {
+    struct btc_client *clients;
+    size_t number;
+    char *file;
+    time_t last_check_time;
+    time_t last_modify_time;
+    pthread_mutex_t lock;
+};
+
+static int cmp_btc_client(const void *l, const void *r) {
+    struct btc_client *pl = (struct btc_client *)l;
+    struct btc_client *pr = (struct btc_client *)r;
+    return strcmp(pl->address, pr->address);
+}
+
+extern struct btc_list *bitcoin_init_list(const char *file) {
+    struct btc_list *l = calloc(1, sizeof(struct btc_list));
+    l->clients = NULL;
+    pthread_mutex_init(&l->lock, NULL);
+    l->number = 0;
+    l->file   = strdup(file);
+    l->last_check_time  = 0;
+    l->last_modify_time = 0;
+    return l;
+}
+
+extern size_t bitcoin_tryload_list(struct btc_list *list) {
+    struct stat attrib;
+    FILE *f = NULL;
+    size_t size = 8;
+    size_t idx  = 0;
+    struct btc_client *clients = NULL;
+    char line[64];
+
+    int is_need_update = 0;
+    pthread_mutex_lock(&list->lock);
+    // update when: 1. last check time over than 10 seconds
+    //              2. file has been modified
+    if (time(NULL) > list->last_check_time + 10) {
+        list->last_check_time = time(NULL);
+        stat(list->file, &attrib);
+        if (list->last_modify_time != attrib.st_mtime) {
+            is_need_update = 1;
+        }
+    }
+    pthread_mutex_unlock(&list->lock);
+    if (is_need_update == 0) {
+        return 0;
+    }
+
+    f = fopen(list->file, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+
+    clients = calloc(size, sizeof(struct btc_client));
+    while (fgets(line, sizeof(line), f)) {
+        line[strlen(line) - 1] = '\0';  // replace \n
+        if (line[strlen(line) - 1] == '\r') {
+            line[strlen(line) - 1] = '\0';
+        }
+        if (strlen(line) > 35 || strlen(line) < 26) {
+            continue;  // bitcoin address length range: [26, 35]
+        }
+        if (idx >= size) {
+            size *= 2;
+            clients = realloc(clients, size * sizeof(struct btc_client));
+        }
+        struct btc_client *c = clients + idx;
+        strcpy(c->address, line);
+        idx++;
+    }
+    fclose(f);
+
+    if (idx == 0) {
+        free(clients);
+        return 0;
+    }
+    assert(idx <= size);
+    if (idx != size) {
+        clients = realloc(clients, idx * sizeof(struct btc_client));
+    }
+    stat(list->file, &attrib);
+
+    qsort(clients, idx, sizeof(struct btc_client), cmp_btc_client);
+
+    pthread_mutex_lock(&list->lock);
+    if (list->clients != NULL) {
+        free(list->clients);
+    }
+    list->clients = clients;
+    list->number  = idx;
+    list->last_check_time  = time(NULL);
+    list->last_modify_time = attrib.st_mtime;
+    pthread_mutex_unlock(&list->lock);
+
+    return idx;
+}
+
+extern int bitcoin_check_address(struct btc_list *list,
+                                 const char *address) {
+    struct btc_client key, *res;
+    memset(&key, 0, sizeof(struct btc_client));
+    strncpy(key.address, address, 35);
+
+    bitcoin_tryload_list(list);
+
+    pthread_mutex_lock(&list->lock);
+    res = bsearch(&key, list->clients, list->number,
+                  sizeof(struct btc_client), cmp_btc_client);
+    pthread_mutex_unlock(&list->lock);
+    if (res != NULL) {
+        return 1;
+    }
+    return 0;
 }

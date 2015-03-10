@@ -104,6 +104,7 @@ int acl = 0;
 int verbose = 0;
 int udprelay = 0;
 static int fast_open = 0;
+struct btc_list *bitcoin_list = NULL;
 #ifdef HAVE_SETRLIMIT
 static int nofile = 0;
 #endif
@@ -548,7 +549,14 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             LOGI("connect to: %s:%d", host, ntohs(port));
         }
 
-        if (atyp_btc) {
+        if (bitcoin_list != NULL) {
+            if (atyp_btc == 0) {
+                if (verbose) {
+                    LOGE("client should carry with bitcoin information");
+                }
+                close_and_free_server(EV_A_ server);
+                return;
+            }
             /*
              * bitcoin information:
              *    +-----------+-----------+----------+
@@ -565,7 +573,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             int64_t ts_offset = (int64_t)time(NULL) - (int64_t)ts;
             if (labs(ts_offset) > 60 * 30) {
                 if (verbose) {
-                    LOGI("Invalid timestamp: %u, offset too large: %d",
+                    LOGE("invalid timestamp: %u, offset too large: %d",
                          ts, (int32_t)ts_offset);
                 }
                 close_and_free_server(EV_A_ server);
@@ -573,7 +581,14 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             }
             if (!bitcoin_verify_message(address, (uint8_t *)signature, t, 4)) {
                 if (verbose) {
-                    LOGI("Invalid signature, address: %s", address);
+                    LOGE("invalid signature, address: %s", address);
+                }
+                close_and_free_server(EV_A_ server);
+                return;
+            }
+            if (bitcoin_check_address(bitcoin_list, address) == 0) {
+                if (verbose) {
+                    LOGE("address \"%s\" is NOT in list", address);
                 }
                 close_and_free_server(EV_A_ server);
                 return;
@@ -1126,9 +1141,10 @@ int main(int argc, char **argv)
     int option_index = 0;
     static struct option long_options[] =
     {
-        { "fast-open", no_argument,       0, 0 },
-        { "acl",       required_argument, 0, 0 },
-        { 0,           0,                 0, 0 }
+        { "fast-open",    no_argument,       0, 0 },
+        { "acl",          required_argument, 0, 0 },
+        { "bitcoin-list", required_argument, 0, 0 },
+        { 0,              0,                 0, 0 }
     };
 
     opterr = 0;
@@ -1144,6 +1160,13 @@ int main(int argc, char **argv)
             } else if (option_index == 1) {
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
+            } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
+                bitcoin_list = bitcoin_init_list(optarg);
+                size_t cnt = bitcoin_tryload_list(bitcoin_list);
+                if (cnt == 0) {
+                    FATAL("invalid bitcoin list");
+                }
+                LOGI("bitcoin address number: %zu", cnt);
             }
             break;
         case 's':

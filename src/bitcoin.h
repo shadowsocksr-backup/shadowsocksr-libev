@@ -23,13 +23,12 @@
 #define _BITCOIN_H
 
 #include <stddef.h>
-#include <inttypes.h>
 
-extern int bitcoin_sign_message(char *signature, size_t signature_size,
+extern int bitcoin_sign_message(unsigned char *buf_65,
                                 const void *msg, const size_t msg_len,
                                 const char *priv_key_b58, const char *address);
 
-extern int bitcoin_verify_message(const char *address, const char *sig_b64,
+extern int bitcoin_verify_message(const char *address, const unsigned char *sig_65,
                                   const void *msg, const size_t msglen);
 
 #endif

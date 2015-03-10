@@ -62,6 +62,7 @@
 #include "utils.h"
 #include "acl.h"
 #include "server.h"
+#include "bitcoin.h"
 
 #ifndef EAGAIN
 #define EAGAIN EWOULDBLOCK
@@ -435,9 +436,10 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
          *    +------+----------+----------+
          */
 
-        int offset = 0;
+        int offset = 1;
         int need_query = 0;
-        char atyp = server->buf[offset++];
+        char atyp = server->buf[0] & 0x0F;
+        char atyp_btc = (server->buf[0] & 0x10) == 0x10 ? 1 : 0;
         char host[256] = { 0 };
         uint16_t port = 0;
         struct addrinfo info;
@@ -544,6 +546,44 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 
         if (verbose) {
             LOGI("connect to: %s:%d", host, ntohs(port));
+        }
+
+        if (atyp_btc) {
+            /*
+             * bitcoin information:
+             *    +-----------+-----------+----------+
+             *    | Signature | Timestamp |  Address |
+             *    +-----------+-----------+----------+
+             *    |    65     |     4     |  String  |
+             *    +-----------+-----------+----------+
+             */
+            char *signature = server->buf + offset;
+            uint8_t *t = (uint8_t *)server->buf + offset + 65;
+            uint32_t ts = ((uint32_t)*(t+0) << 24) + ((uint32_t)*(t+1) << 16)
+                        + ((uint32_t)*(t+2) <<  8) + ((uint32_t)*(t+3) <<  0);
+            char *address = server->buf + offset + 65 + 4;
+            int64_t ts_offset = (int64_t)time(NULL) - (int64_t)ts;
+            if (labs(ts_offset) > 60 * 30) {
+                if (verbose) {
+                    LOGI("Invalid timestamp: %u, offset too large: %d",
+                         ts, (int32_t)ts_offset);
+                }
+                close_and_free_server(EV_A_ server);
+                return;
+            }
+            if (!bitcoin_verify_message(address, (uint8_t *)signature, t, 4)) {
+                if (verbose) {
+                    LOGI("Invalid signature, address: %s", address);
+                }
+                close_and_free_server(EV_A_ server);
+                return;
+            }
+            offset += 65 + 4 + strlen(address) + 1;
+
+            if (verbose) {
+                LOGI("bitcoin address: %s, time offset: %d",
+                     address, (int32_t)ts_offset);
+            }
         }
 
         // XXX: should handle buffer carefully

@@ -10,10 +10,10 @@ AM_CFLAGS += -I$(top_srcdir)/libsodium/src/libsodium/include
 AM_LDFLAGS = -static
 
 SS_COMMON_LIBS = $(top_builddir)/libev/libev.la \
-				 $(top_builddir)/libipset/libipset.la \
-				 $(top_builddir)/libcork/libcork.la \
-				 $(top_builddir)/libsodium/src/libsodium/libsodium.la \
-				 $(INET_NTOP_LIB)
+                 $(top_builddir)/libipset/libipset.la \
+                 $(top_builddir)/libcork/libcork.la \
+                 $(top_builddir)/libsodium/src/libsodium/libsodium.la \
+                 $(INET_NTOP_LIB)
 
 bin_PROGRAMS = ss-local ss-tunnel
 if !BUILD_WINCOMPAT
@@ -23,30 +23,32 @@ endif
 ss_local_SOURCES = utils.c \
                    jconf.c \
                    json.c \
-				   encrypt.c \
-				   udprelay.c \
-				   cache.c \
-				   acl.c \
-				   netutils.c \
-				   local.c
+                   encrypt.c \
+                   udprelay.c \
+                   cache.c \
+                   acl.c \
+                   netutils.c \
+                   bitcoin.c \
+                   local.c
 
 ss_tunnel_SOURCES = utils.c \
-					jconf.c \
-					json.c \
-					encrypt.c \
-					udprelay.c \
-					cache.c \
-					netutils.c \
-					tunnel.c
+                    jconf.c \
+                    json.c \
+                    encrypt.c \
+                    udprelay.c \
+                    cache.c \
+                    netutils.c \
+                    tunnel.c
 
 ss_server_SOURCES = utils.c \
                     jconf.c \
                     json.c \
                     encrypt.c \
-					udprelay.c \
-					cache.c \
-					acl.c \
-					resolv.c \
+                    udprelay.c \
+                    cache.c \
+                    acl.c \
+                    resolv.c \
+                    bitcoin.c \
                     server.c
 
 ss_local_LDADD = $(SS_COMMON_LIBS)
@@ -71,7 +73,7 @@ ss_redir_SOURCES = utils.c \
                    jconf.c \
                    json.c \
                    encrypt.c \
-				   netutils.c \
+                   netutils.c \
                    redir.c
 ss_redir_LDADD = $(SS_COMMON_LIBS)
 ss_redir_LDADD += $(top_builddir)/libudns/libudns.la

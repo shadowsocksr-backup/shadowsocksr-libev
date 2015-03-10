@@ -927,16 +927,18 @@ int main(int argc, char **argv)
     int option_index = 0;
     static struct option long_options[] =
     {
-        { "fast-open", no_argument,       0, 0 },
-        { "acl",       required_argument, 0, 0 },
-        { 0,           0,                 0, 0 }
+        { "fast-open",       no_argument,       0, 0 },
+        { "acl",             required_argument, 0, 0 },
+        { "bitcoin-address", required_argument, 0, 0 },
+        { "bitcoin-privkey", required_argument, 0, 0 },
+        { 0,                 0,                 0, 0 }
     };
 
     opterr = 0;
 
     USE_TTY();
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:A:P:uv",
+    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:uv",
                             long_options, &option_index)) != -1) {
         switch (c) {
         case 0:
@@ -945,6 +947,10 @@ int main(int argc, char **argv)
             } else if (option_index == 1) {
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
+            } else if (strcmp(long_options[option_index].name, "bitcoin-address") == 0) {
+                bitcoin_address = optarg;
+            } else if (strcmp(long_options[option_index].name, "bitcoin-privkey") == 0) {
+                bitcoin_privkey = optarg;
             }
             break;
         case 's':
@@ -983,12 +989,6 @@ int main(int argc, char **argv)
             break;
         case 'a':
             user = optarg;
-            break;
-        case 'A':
-            bitcoin_address = optarg;
-            break;
-        case 'P':
-            bitcoin_privkey = optarg;
             break;
         case 'u':
             udprelay = 1;

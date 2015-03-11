@@ -22,6 +22,7 @@
 #include "bitcoin.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
@@ -641,8 +642,7 @@ extern size_t bitcoin_tryload_list(struct btc_list *list) {
 
     clients = calloc(size, sizeof(struct btc_client));
     while (fgets(line, sizeof(line), f)) {
-        line[strlen(line) - 1] = '\0';  // replace \n
-        if (line[strlen(line) - 1] == '\r') {
+        while (strlen(line) > 0 && !isalpha(line[strlen(line) - 1])) {
             line[strlen(line) - 1] = '\0';
         }
         if (strlen(line) > 35 || strlen(line) < 26) {

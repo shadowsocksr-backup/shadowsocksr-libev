@@ -464,10 +464,10 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                 // bitcoin information is extra, so minus it's length
                 r -= (3 + addr_len - bitcoin_len);
                 buf += (3 + addr_len - bitcoin_len);
-#endif
+#else
                 r -= (3 + addr_len);
                 buf += (3 + addr_len);
-
+#endif
                 server->stage = 5;
 
                 if (verbose) {

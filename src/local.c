@@ -465,6 +465,8 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                 r -= (3 + addr_len - bitcoin_len);
                 buf += (3 + addr_len - bitcoin_len);
 #endif
+                r -= (3 + addr_len);
+                buf += (3 + addr_len);
 
                 server->stage = 5;
 

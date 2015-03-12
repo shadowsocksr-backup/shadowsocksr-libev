@@ -1163,9 +1163,6 @@ int main(int argc, char **argv)
             } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
                 bitcoin_list = bitcoin_init_list(optarg);
                 size_t cnt = bitcoin_tryload_list(bitcoin_list);
-                if (cnt == 0) {
-                    FATAL("invalid bitcoin list");
-                }
                 LOGI("bitcoin address number: %zu", cnt);
             }
             break;

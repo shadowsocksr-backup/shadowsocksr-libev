@@ -67,11 +67,29 @@ function dump_for_ss_server($exist_txs) {
 		$address[] = $_tx['address'];
 	}
 	$str = implode("\n", $address)."\n";
+	LOGI("try dump ".count($address)." address to ss_server_file");
 	
-	LOGI("dump ".count($address)." address to ss_server_file");
-	if (file_put_contents($_CFG['ss_server_file'], $str) == false) {
-		LOGI("write file fail: {$_CFG['ss_server_file']}");
+	$exist = file_exists($_CFG['ss_server_file']);
+	$fp = fopen($_CFG['ss_server_file'], $exist ? "r+" : "w");
+	if (!$fp) {
+		LOGI("write file failure: {$_CFG['ss_server_file']}");
+		return;
+	} 
+
+	// use flock when write file
+	for ($i = 0; $i < 3; $i++) {  // try 3 times if need
+		if (!flock($fp, LOCK_EX | LOCK_NB)) {
+			sleep(3);continue;
+		}
+		ftruncate($fp, 0);
+		fwrite($fp, $str);
+		fflush($fp);
+		flock($fp, LOCK_UN);
+		
+		LOGI("write file success: {$_CFG['ss_server_file']}");
+		break;
 	}
+	fclose($fp);
 }
 
 

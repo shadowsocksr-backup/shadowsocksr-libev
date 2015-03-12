@@ -1161,12 +1161,11 @@ int main(int argc, char **argv)
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
             } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
+                LOGI("bitcoin list file: %s", optarg);
                 bitcoin_list = bitcoin_init_list(optarg);
-                size_t cnt = bitcoin_tryload_list(bitcoin_list);
-                if (cnt == 0) {
-                    FATAL("invalid bitcoin list");
+                if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
+                    FATAL("setup bitcoin check list thread failure");
                 }
-                LOGI("bitcoin address number: %zu", cnt);
             }
             break;
         case 's':
@@ -1408,6 +1407,10 @@ int main(int argc, char **argv)
 
     if (udprelay) {
         free_udprelay();
+    }
+    
+    if (bitcoin_list) {
+        bitcoin_clean_update_thread(bitcoin_list);
     }
 
     resolv_shutdown(loop);

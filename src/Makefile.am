@@ -54,9 +54,9 @@ ss_server_SOURCES = utils.c \
 ss_local_LDADD = $(SS_COMMON_LIBS)
 ss_tunnel_LDADD = $(SS_COMMON_LIBS)
 ss_server_LDADD = $(SS_COMMON_LIBS)
-ss_local_LDADD += $(top_builddir)/libudns/libudns.la
+ss_local_LDADD += $(top_builddir)/libudns/libudns.la -lpthread
 ss_tunnel_LDADD += $(top_builddir)/libudns/libudns.la
-ss_server_LDADD += $(top_builddir)/libudns/libudns.la
+ss_server_LDADD += $(top_builddir)/libudns/libudns.la  -lpthread
 
 ss_local_CFLAGS = $(AM_CFLAGS) -DUDPRELAY_LOCAL
 ss_tunnel_CFLAGS = $(AM_CFLAGS) -DUDPRELAY_LOCAL -DUDPRELAY_TUNNEL

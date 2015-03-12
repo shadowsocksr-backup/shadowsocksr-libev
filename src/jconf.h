@@ -47,6 +47,7 @@ typedef struct {
     char *nameserver;
     char *bitcoin_address;
     char *bitcoin_privkey;
+    char *bitcoin_list;
 } jconf_t;
 
 jconf_t *read_jconf(const char * file);

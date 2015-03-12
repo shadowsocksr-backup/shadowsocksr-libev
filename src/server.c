@@ -1161,11 +1161,7 @@ int main(int argc, char **argv)
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
             } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
-                LOGI("bitcoin list file: %s", optarg);
                 bitcoin_list = bitcoin_init_list(optarg);
-                if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
-                    FATAL("setup bitcoin check list thread failure");
-                }
             }
             break;
         case 's':
@@ -1243,6 +1239,9 @@ int main(int argc, char **argv)
         if (timeout == NULL) {
             timeout = conf->timeout;
         }
+        if (bitcoin_list == NULL) {
+            bitcoin_list = bitcoin_init_list(conf->bitcoin_list);
+        }
 #ifdef TCP_FASTOPEN
         if (fast_open == 0) {
             fast_open = conf->fast_open;
@@ -1265,6 +1264,12 @@ int main(int argc, char **argv)
 #endif
         if (conf->nameserver != NULL) {
             nameservers[nameserver_num++] = conf->nameserver;
+        }
+    }
+
+    if (bitcoin_list) {
+        if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
+            FATAL("setup bitcoin check list thread failure");
         }
     }
 

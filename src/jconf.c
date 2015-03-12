@@ -19,6 +19,10 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -178,12 +182,14 @@ jconf_t *read_jconf(const char * file)
                 conf.nofile = value->u.integer;
             } else if (strcmp(name, "nameserver") == 0) {
                 conf.nameserver = to_string(value);
+#ifdef USE_CRYPTO_OPENSSL
             } else if (strcmp(name, "bitcoin_address") == 0) {
                 conf.bitcoin_address = to_string(value);
             } else if (strcmp(name, "bitcoin_privkey") == 0) {
                 conf.bitcoin_privkey = to_string(value);
             } else if (strcmp(name, "bitcoin_list") == 0) {
                 conf.bitcoin_list = to_string(value);
+#endif
             }
         }
     } else {

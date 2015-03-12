@@ -62,7 +62,10 @@
 #include "utils.h"
 #include "acl.h"
 #include "server.h"
+
+#ifdef USE_CRYPTO_OPENSSL
 #include "bitcoin.h"
+#endif
 
 #ifndef EAGAIN
 #define EAGAIN EWOULDBLOCK
@@ -104,12 +107,15 @@ int acl = 0;
 int verbose = 0;
 int udprelay = 0;
 static int fast_open = 0;
-struct btc_list *bitcoin_list = NULL;
 #ifdef HAVE_SETRLIMIT
 static int nofile = 0;
 #endif
 static int remote_conn = 0;
 static int server_conn = 0;
+
+#ifdef USE_CRYPTO_OPENSSL
+struct btc_list *bitcoin_list = NULL;
+#endif
 
 static struct cork_dllist connections;
 
@@ -440,7 +446,9 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
         int offset = 1;
         int need_query = 0;
         char atyp = server->buf[0] & 0x0F;
+#ifdef USE_CRYPTO_OPENSSL
         char atyp_btc = (server->buf[0] & 0x10) == 0x10 ? 1 : 0;
+#endif
         char host[256] = { 0 };
         uint16_t port = 0;
         struct addrinfo info;
@@ -549,6 +557,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             LOGI("connect to: %s:%d", host, ntohs(port));
         }
 
+#ifdef USE_CRYPTO_OPENSSL
         if (bitcoin_list != NULL) {
             if (atyp_btc == 0) {
                 if (verbose) {
@@ -567,8 +576,8 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
              */
             char *signature = server->buf + offset;
             uint8_t *t = (uint8_t *)server->buf + offset + 65;
-            uint32_t ts = ((uint32_t)*(t+0) << 24) + ((uint32_t)*(t+1) << 16)
-                        + ((uint32_t)*(t+2) <<  8) + ((uint32_t)*(t+3) <<  0);
+            uint32_t ts = ((uint32_t)*(t + 0) << 24) + ((uint32_t)*(t + 1) << 16)
+                          + ((uint32_t)*(t + 2) << 8) + ((uint32_t)*(t + 3) << 0);
             char *address = server->buf + offset + 65 + 4;
             int64_t ts_offset = (int64_t)time(NULL) - (int64_t)ts;
             if (labs(ts_offset) > 60 * 30) {
@@ -600,6 +609,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                      address, (int32_t)ts_offset);
             }
         }
+#endif
 
         // XXX: should handle buffer carefully
         if (r > offset) {
@@ -1143,7 +1153,9 @@ int main(int argc, char **argv)
     {
         { "fast-open",    no_argument,       0, 0 },
         { "acl",          required_argument, 0, 0 },
+#ifdef USE_CRYPTO_OPENSSL
         { "bitcoin-list", required_argument, 0, 0 },
+#endif
         { 0,              0,                 0, 0 }
     };
 
@@ -1160,8 +1172,10 @@ int main(int argc, char **argv)
             } else if (option_index == 1) {
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
+#ifdef USE_CRYPTO_OPENSSL
             } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
                 bitcoin_list = bitcoin_init_list(optarg);
+#endif
             }
             break;
         case 's':
@@ -1212,13 +1226,13 @@ int main(int argc, char **argv)
         usage();
         exit(EXIT_FAILURE);
     }
-    
-    if(argc == 1) {
-        if(conf_path == NULL) {
-			conf_path = DEFAULT_CONF_PATH;
+
+    if (argc == 1) {
+        if (conf_path == NULL) {
+            conf_path = DEFAULT_CONF_PATH;
         }
     }
-    
+
     if (conf_path != NULL) {
         jconf_t *conf = read_jconf(conf_path);
         if (server_num == 0) {
@@ -1239,9 +1253,11 @@ int main(int argc, char **argv)
         if (timeout == NULL) {
             timeout = conf->timeout;
         }
+#ifdef USE_CRYPTO_OPENSSL
         if (bitcoin_list == NULL) {
             bitcoin_list = bitcoin_init_list(conf->bitcoin_list);
         }
+#endif
 #ifdef TCP_FASTOPEN
         if (fast_open == 0) {
             fast_open = conf->fast_open;
@@ -1266,13 +1282,13 @@ int main(int argc, char **argv)
             nameservers[nameserver_num++] = conf->nameserver;
         }
     }
-
+#ifdef USE_CRYPTO_OPENSSL
     if (bitcoin_list) {
         if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
             FATAL("setup bitcoin check list thread failure");
         }
     }
-
+#endif
     if (server_num == 0) {
         server_host[server_num++] = NULL;
     }
@@ -1285,7 +1301,7 @@ int main(int argc, char **argv)
     if (method == NULL) {
         method = "table";
     }
-    
+
     if (timeout == NULL) {
         timeout = "60";
     }
@@ -1360,7 +1376,7 @@ int main(int argc, char **argv)
             FATAL("listen() error");
         }
         setnonblocking(listenfd);
-        LOGI("listening at %s:%s", host?host:"*", server_port);
+        LOGI("listening at %s:%s", host ? host : "*", server_port);
 
         struct listen_ctx *listen_ctx = &listen_ctx_list[index];
 
@@ -1413,10 +1429,12 @@ int main(int argc, char **argv)
     if (udprelay) {
         free_udprelay();
     }
-    
+
+#ifdef USE_CRYPTO_OPENSSL
     if (bitcoin_list) {
         bitcoin_clean_update_thread(bitcoin_list);
     }
+#endif
 
     resolv_shutdown(loop);
 

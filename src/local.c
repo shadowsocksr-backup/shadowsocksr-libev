@@ -66,7 +66,10 @@
 #include "socks5.h"
 #include "acl.h"
 #include "local.h"
+
+#ifdef USE_CRYPTO_OPENSSL
 #include "bitcoin.h"
+#endif
 
 #ifndef EAGAIN
 #define EAGAIN EWOULDBLOCK
@@ -83,13 +86,16 @@
 int acl = 0;
 int verbose = 0;
 int udprelay = 0;
-char *bitcoin_address = NULL;
-char *bitcoin_privkey = NULL;
 static int fast_open = 0;
 #ifdef HAVE_SETRLIMIT
 #ifndef LIB_ONLY
 static int nofile = 0;
 #endif
+#endif
+
+#ifdef USE_CRYPTO_OPENSSL
+char *bitcoin_address = NULL;
+char *bitcoin_privkey = NULL;
 #endif
 
 static void server_recv_cb(EV_P_ ev_io *w, int revents);
@@ -423,6 +429,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                     return;
                 }
 
+#ifdef USE_CRYPTO_OPENSSL
                 // add bitcoin infomation to `ss_addr_to_send`
                 size_t bitcoin_len = 0;
                 if (bitcoin_address != NULL && bitcoin_privkey != NULL) {
@@ -435,9 +442,9 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                      *    +-----------+-----------+----------+
                      */
                     uint32_t now = (uint32_t)time(NULL);
-                    uint8_t msg[4] = {(uint8_t)(now >> 24), (uint8_t)(now >> 16),
-                                      (uint8_t)(now >>  8), (uint8_t)(now >>  0)};
-                    uint8_t sig[65] = {0};  // signature buf size always 65 bytes
+                    uint8_t msg[4] = { (uint8_t)(now >> 24), (uint8_t)(now >> 16),
+                                       (uint8_t)(now >> 8),  (uint8_t)(now >> 0) };
+                    uint8_t sig[65] = { 0 };  // signature buf size always 65 bytes
                     if (!bitcoin_sign_message(sig, msg, sizeof(msg), bitcoin_privkey, bitcoin_address)) {
                         FATAL("bitcoin sign message fail");
                     }
@@ -454,11 +461,12 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                     ss_addr_to_send[0] |= 0x10;  // set bitcoin flag
                 }
 
-                server->stage = 5;
-
                 // bitcoin information is extra, so minus it's length
-                r   -= (3 + addr_len - bitcoin_len);
+                r -= (3 + addr_len - bitcoin_len);
                 buf += (3 + addr_len - bitcoin_len);
+#endif
+
+                server->stage = 5;
 
                 if (verbose) {
                     LOGI("connect to %s:%s", host, port);
@@ -929,8 +937,10 @@ int main(int argc, char **argv)
     {
         { "fast-open",       no_argument,       0, 0 },
         { "acl",             required_argument, 0, 0 },
+#ifdef USE_CRYPTO_OPENSSL
         { "bitcoin-address", required_argument, 0, 0 },
         { "bitcoin-privkey", required_argument, 0, 0 },
+#endif
         { 0,                 0,                 0, 0 }
     };
 
@@ -947,10 +957,12 @@ int main(int argc, char **argv)
             } else if (option_index == 1) {
                 LOGI("initialize acl...");
                 acl = !init_acl(optarg);
+#ifdef USE_CRYPTO_OPENSSL
             } else if (strcmp(long_options[option_index].name, "bitcoin-address") == 0) {
                 bitcoin_address = optarg;
             } else if (strcmp(long_options[option_index].name, "bitcoin-privkey") == 0) {
                 bitcoin_privkey = optarg;
+#endif
             }
             break;
         case 's':
@@ -1035,12 +1047,14 @@ int main(int argc, char **argv)
         if (timeout == NULL) {
             timeout = conf->timeout;
         }
+#ifdef USE_CRYPTO_OPENSSL
         if (bitcoin_address == NULL) {
             bitcoin_address = conf->bitcoin_address;
         }
         if (bitcoin_privkey == NULL) {
             bitcoin_privkey = conf->bitcoin_privkey;
         }
+#endif
         if (fast_open == 0) {
             fast_open = conf->fast_open;
         }

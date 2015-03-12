@@ -266,6 +266,7 @@ void usage()
     printf(
         "                                  only available in local and server mode\n");
     printf("\n");
+#ifdef USE_CRYPTO_OPENSSL
     printf(
         "       [--bitcoin-list <bitcoin_file>]    config file of address list\n");
     printf(
@@ -281,6 +282,7 @@ void usage()
     printf(
         "                                          only available in local mode\n");
     printf("\n");
+#endif
     printf(
         "       [-v]                       verbose mode\n");
     printf("\n");

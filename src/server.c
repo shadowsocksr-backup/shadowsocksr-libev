@@ -1174,11 +1174,7 @@ int main(int argc, char **argv)
                 acl = !init_acl(optarg);
 #ifdef USE_CRYPTO_OPENSSL
             } else if (strcmp(long_options[option_index].name, "bitcoin-list") == 0) {
-                LOGI("bitcoin list file: %s", optarg);
                 bitcoin_list = bitcoin_init_list(optarg);
-                if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
-                    FATAL("setup bitcoin check list thread failure");
-                }
 #endif
             }
             break;
@@ -1257,6 +1253,11 @@ int main(int argc, char **argv)
         if (timeout == NULL) {
             timeout = conf->timeout;
         }
+#ifdef USE_CRYPTO_OPENSSL
+        if (bitcoin_list == NULL) {
+            bitcoin_list = bitcoin_init_list(conf->bitcoin_list);
+        }
+#endif
 #ifdef TCP_FASTOPEN
         if (fast_open == 0) {
             fast_open = conf->fast_open;
@@ -1281,7 +1282,13 @@ int main(int argc, char **argv)
             nameservers[nameserver_num++] = conf->nameserver;
         }
     }
-
+#ifdef USE_CRYPTO_OPENSSL
+    if (bitcoin_list) {
+        if (bitcoin_setup_update_thread(bitcoin_list) == 0) {
+            FATAL("setup bitcoin check list thread failure");
+        }
+    }
+#endif
     if (server_num == 0) {
         server_host[server_num++] = NULL;
     }

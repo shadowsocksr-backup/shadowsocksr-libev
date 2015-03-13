@@ -48,6 +48,7 @@ typedef struct {
 #ifdef USE_CRYPTO_OPENSSL
     char *bitcoin_address;
     char *bitcoin_privkey;
+    char *bitcoin_list;
 #endif
 } jconf_t;
 

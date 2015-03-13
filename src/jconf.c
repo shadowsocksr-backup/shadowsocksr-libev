@@ -187,6 +187,8 @@ jconf_t *read_jconf(const char * file)
                 conf.bitcoin_address = to_string(value);
             } else if (strcmp(name, "bitcoin_privkey") == 0) {
                 conf.bitcoin_privkey = to_string(value);
+            } else if (strcmp(name, "bitcoin_list") == 0) {
+                conf.bitcoin_list = to_string(value);
 #endif
             }
         }

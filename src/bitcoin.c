@@ -512,7 +512,7 @@ static int priv_key_b58_to_address(const char *priv_key_b58,
 //   -1 : invalid private key
 //    1 : compressed
 //    0 : uncompressed
-static int isCompressedAddress(const char *priv_key_b58, const char *address)
+static int isCompressedAddress(const char *priv_key_b58, const char *address, const size_t addr_len)
 {
     int is_compressed_pubkey;
     char buf[64];
@@ -526,7 +526,7 @@ static int isCompressedAddress(const char *priv_key_b58, const char *address)
     if (res != 1) {
         return -1;
     }
-    if (memcmp(buf, address, strlen(address)) == 0) {
+    if (memcmp(buf, address, addr_len) == 0) {
         return 1;  // compressed
     }
 
@@ -538,7 +538,7 @@ static int isCompressedAddress(const char *priv_key_b58, const char *address)
     if (res != 1) {
         return -1;
     }
-    if (memcmp(buf, address, strlen(address)) == 0) {
+    if (memcmp(buf, address, addr_len) == 0) {
         return 0;  // uncompressed
     }
 
@@ -657,15 +657,15 @@ static int sign_message(uint8_t *signature_65,
 
 int bitcoin_sign_message(unsigned char *buf_65,
                          const void *msg, const size_t msg_len,
-                         const char *priv_key_b58, const char *address)
+                         const char *priv_key_b58, const char *address, const size_t addr_len)
 {
-    int is_compressed = isCompressedAddress(priv_key_b58, address);
+    int is_compressed = isCompressedAddress(priv_key_b58, address, addr_len);
     return sign_message(buf_65, (uint8_t *)msg, msg_len,
                         priv_key_b58, is_compressed);
 }
 
 int bitcoin_verify_message(const char *address, const unsigned char *sig,
-                           const void *msg, const size_t msglen)
+                           const void *msg, const size_t msglen, const size_t addr_len)
 {
     EC_KEY *pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
     uint8_t hash[32] = { 0 };
@@ -693,7 +693,7 @@ int bitcoin_verify_message(const char *address, const unsigned char *sig,
                       is_compressed_pubkey ?
                       POINT_CONVERSION_COMPRESSED : POINT_CONVERSION_UNCOMPRESSED,
                       BITCOIN_ADDRESS_PREFIX_PUBKEY, ecprot);
-    if (memcmp(address, ecprot, strlen(address)) == 0) {
+    if (memcmp(address, ecprot, addr_len) == 0) {
         fOK = 1;
     }
 

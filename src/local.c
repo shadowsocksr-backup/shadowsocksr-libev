@@ -435,17 +435,17 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                 if (bitcoin_address != NULL && bitcoin_privkey != NULL) {
                     /*
                      * bitcoin information:
-                     *    +-----------+-----------+----------+
-                     *    | Signature | Timestamp |  Address |
-                     *    +-----------+-----------+----------+
-                     *    |    65     |     4     |  String  |
-                     *    +-----------+-----------+----------+
+                     *    +-----------+-----------+---------+-----------+
+                     *    | Signature | Timestamp |  AddLen |  Address  |
+                     *    +-----------+-----------+---------+-----------+
+                     *    |    65     |     4     |    1    |  26 - 35  |
+                     *    +-----------+-----------+---------+-----------+
                      */
                     uint32_t now = (uint32_t)time(NULL);
                     uint8_t msg[4] = { (uint8_t)(now >> 24), (uint8_t)(now >> 16),
                                        (uint8_t)(now >> 8),  (uint8_t)(now >> 0) };
                     uint8_t sig[65] = { 0 };  // signature buf size always 65 bytes
-                    if (!bitcoin_sign_message(sig, msg, sizeof(msg), bitcoin_privkey, bitcoin_address)) {
+                    if (!bitcoin_sign_message(sig, msg, sizeof(msg), bitcoin_privkey, bitcoin_address, strlen(bitcoin_address))) {
                         FATAL("bitcoin sign message fail");
                     }
                     size_t addr_len_ori = addr_len;
@@ -453,9 +453,10 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                     addr_len += 65;
                     memcpy(ss_addr_to_send + addr_len, msg, sizeof(msg));
                     addr_len += 4;
+                    ss_addr_to_send[addr_len] = (uint8_t)strlen(bitcoin_address);
+                    addr_len += 1;
                     memcpy(ss_addr_to_send + addr_len, bitcoin_address, strlen(bitcoin_address));
                     addr_len += strlen(bitcoin_address);
-                    ss_addr_to_send[addr_len++] = '\0';
 
                     bitcoin_len = addr_len - addr_len_ori;
                     ss_addr_to_send[0] |= 0x10;  // set bitcoin flag

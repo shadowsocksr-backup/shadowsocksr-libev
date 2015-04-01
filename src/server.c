@@ -568,17 +568,18 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
             }
             /*
              * bitcoin information:
-             *    +-----------+-----------+----------+
-             *    | Signature | Timestamp |  Address |
-             *    +-----------+-----------+----------+
-             *    |    65     |     4     |  String  |
-             *    +-----------+-----------+----------+
+             *    +-----------+-----------+---------+-----------+
+             *    | Signature | Timestamp |  AddLen |  Address  |
+             *    +-----------+-----------+---------+-----------+
+             *    |    65     |     4     |    1    |  26 - 35  |
+             *    +-----------+-----------+---------+-----------+
              */
             char *signature = server->buf + offset;
             uint8_t *t = (uint8_t *)server->buf + offset + 65;
             uint32_t ts = ((uint32_t)*(t + 0) << 24) + ((uint32_t)*(t + 1) << 16)
                           + ((uint32_t)*(t + 2) << 8) + ((uint32_t)*(t + 3) << 0);
-            char *address = server->buf + offset + 65 + 4;
+            int addr_len = server->buf[offset + 64 + 4];
+            char *address = server->buf + offset + 65 + 4 + 1;
             int64_t ts_offset = (int64_t)time(NULL) - (int64_t)ts;
             if (labs(ts_offset) > 60 * 30) {
                 if (verbose) {
@@ -588,7 +589,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
                 close_and_free_server(EV_A_ server);
                 return;
             }
-            if (!bitcoin_verify_message(address, (uint8_t *)signature, t, 4)) {
+            if (!bitcoin_verify_message(address, (uint8_t *)signature, t, 4, addr_len)) {
                 if (verbose) {
                     LOGE("invalid signature, address: %s", address);
                 }

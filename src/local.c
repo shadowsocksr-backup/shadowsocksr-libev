@@ -721,7 +721,6 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                 else if (host_match < 0)
                     bypass = 1;                 // proxy hostnames in white list
                 else {
-#ifndef ANDROID
                     if (atyp == 3) {            // resolve domain so we can bypass domain with geoip
                         err = get_sockaddr(host, port, &storage, 0, ipv6first);
                         if ( err != -1) {
@@ -742,7 +741,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                             }
                         }
                     }
-#endif
+
                     if (outbound_block_match_host(ip) == 1) {
                         if (verbose)
                             LOGI("outbound blocked %s", ip);
@@ -774,11 +773,9 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                     struct sockaddr_storage storage;
                     memset(&storage, 0, sizeof(struct sockaddr_storage));
                     int err;
-#ifndef ANDROID
                     if (atyp == 3 && resolved != 1)
                         err = get_sockaddr(host, port, &storage, 0, ipv6first);
                     else
-#endif
                         err = get_sockaddr(ip, port, &storage, 0, ipv6first);
                     if (err != -1) {
                         remote = create_remote(server->listener, (struct sockaddr *)&storage);

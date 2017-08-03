@@ -156,6 +156,8 @@ void auth_chain_local_data_init(auth_chain_local_data* local) {
     local->rnd = 0;
     local->data_size_list = NULL;
     local->data_size_list_len = 0;
+    local->data_size_list2 = NULL;
+    local->data_size_list2_len = 0;//Thanks to @hiboy
 }
 
 void * auth_chain_a_init_data() {
@@ -632,7 +634,7 @@ void auth_chain_b_set_server_info(obfs *self, server_info *server) {
     quick_sort(local->data_size_list, local->data_size_list_len);
 
     local->data_size_list2_len = shift128plus_next(random) % 16 + 8;
-    local->data_size_list2 = (int*)malloc(local->data_size_list_len * sizeof(int));
+    local->data_size_list2 = (int*)malloc(local->data_size_list2_len * sizeof(int)); //Thanks to anonymous
 
     for(i = 0; i < local->data_size_list2_len; i++) {
         local->data_size_list2[i] = shift128plus_next(random) % 2340 % 2040 % 1440;
